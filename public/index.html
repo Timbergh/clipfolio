@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clipfolio</title>
+    <link rel="icon" type="image/x-icon" href="icon.ico">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: file: local:; media-src 'self' blob: file: local:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' file: ws://localhost:3000 http://localhost:3000; frame-src 'none';">
+    <script>
+        // Global polyfill for webpack - must run before any webpack code
+        window.global = window;
+    </script>
+    <style>
+        #unload-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 15, 20, 1);
+            z-index: 999999;
+            pointer-events: none;
+        }
+    </style>
+    <script>
+        (function() {
+            var overlay = document.createElement('div');
+            overlay.id = 'unload-overlay';
+            overlay.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,15,20,1);z-index:999999;pointer-events:none;';
+
+            if (document.body) {
+                document.body.appendChild(overlay);
+            } else {
+                document.addEventListener('DOMContentLoaded', function() {
+                    document.body.appendChild(overlay);
+                });
+            }
+
+            var showOverlay = function() {
+                overlay.style.display = 'block';
+
+                var lightRays = document.querySelectorAll('.light-rays-container');
+                for (var i = 0; i < lightRays.length; i++) {
+                    lightRays[i].style.opacity = '0';
+                    lightRays[i].style.visibility = 'hidden';
+                }
+            };
+
+            var hideOverlay = function() {
+                overlay.style.display = 'none';
+                var lightRays = document.querySelectorAll('.light-rays-container');
+                for (var i = 0; i < lightRays.length; i++) {
+                    lightRays[i].style.opacity = '';
+                    lightRays[i].style.visibility = '';
+                    lightRays[i].style.display = '';
+                }
+            };
+
+            window.addEventListener('beforeunload', showOverlay, true);
+            window.addEventListener('pagehide', showOverlay, true);
+            window.addEventListener('unload', showOverlay, true);
+
+            window.addEventListener('hashchange', function() {
+                showOverlay();
+                setTimeout(hideOverlay, 50);
+            }, true);
+
+            window.addEventListener('popstate', function() {
+                showOverlay();
+                setTimeout(hideOverlay, 50);
+            }, true);
+
+            window.__showOverlay = showOverlay;
+            window.__hideOverlay = hideOverlay;
+        })();
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>

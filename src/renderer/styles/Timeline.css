@@ -1,0 +1,251 @@
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: transparent;
+  position: relative;
+  border: none;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.time-ruler-container {
+  display: flex;
+  height: 36px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.time-ruler-spacer {
+  width: 180px;
+  flex-shrink: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+  border: none;
+}
+
+.timeline-time-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.timeline-time-display .time-current {
+  color: rgba(255, 255, 255, 0.98);
+  font-weight: 600;
+}
+
+.timeline-time-display .time-separator {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.timeline-time-display .time-total {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.time-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.current-time {
+  color: rgba(255, 255, 255, 0.98);
+  font-weight: 600;
+}
+
+.separator {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.total-time {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.trim-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.trim-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.trim-time {
+  color: rgba(76, 175, 80, 0.9);
+}
+
+.trim-duration {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.time-ruler {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  cursor: pointer;
+  user-select: none;
+  margin: 0 12px;
+}
+
+.time-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.time-marker.first {
+  transform: translateX(0);
+}
+
+.time-marker.last {
+  transform: translateX(-100%);
+}
+
+/* Pin line that hangs down */
+.time-marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.time-marker.first::before {
+  left: 0;
+  transform: none;
+}
+
+.time-marker.last::before {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Major markers - tallest with labels */
+.time-marker-major::before {
+  height: 12px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Medium markers - medium height, no label */
+.time-marker-medium::before {
+  height: 8px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Minor markers - shortest, no label */
+.time-marker-minor::before {
+  height: 4px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.time-label {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.time-marker.first .time-label {
+  left: 0;
+  transform: none;
+}
+
+.time-marker.last .time-label {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.trim-handle-overlay {
+  position: absolute;
+  width: 16px;
+  cursor: ew-resize;
+  z-index: 50;
+  pointer-events: all;
+  background: transparent;
+}
+
+.trim-handle-overlay.trim-start {
+  transform: translateX(-8px);
+}
+
+.trim-handle-overlay.trim-end {
+  transform: translateX(-8px);
+}
+
+.trim-line {
+  display: none;
+}
+
+.trim-grip {
+  display: none;
+}
+
+.tracks-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tracks-container::-webkit-scrollbar {
+  display: none;
+}
+
+.global-playhead-overlay {
+  position: absolute;
+  top: 36px;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6),
+    0 0 24px rgba(255, 255, 255, 0.4);
+  z-index: 100;
+  transform: translateX(-1px);
+  cursor: ew-resize;
+  pointer-events: all;
+  transition: left 0.05s ease-out;
+}
+
+.global-playhead-overlay.dragging {
+  transition: none;
+}
+
+.playhead-handle-top {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 12px;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+}

@@ -1,0 +1,123 @@
+{
+  "name": "clipfolio",
+  "version": "1.0.0",
+  "description": "A simple video clip manager",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build:renderer": "webpack --mode production",
+    "build:main": "tsc --project tsconfig.main.json",
+    "build:preload": "tsc --project tsconfig.preload.json",
+    "copy:assets": "node -e \"const fs = require('fs'); const path = require('path'); const src = path.join('src', 'assets'); const destMain = path.join('dist', 'assets'); const destRenderer = path.join('dist', 'renderer'); if (!fs.existsSync(destMain)) fs.mkdirSync(destMain, { recursive: true }); fs.readdirSync(src).forEach(file => { fs.copyFileSync(path.join(src, file), path.join(destMain, file)); if (file.endsWith('.ico')) fs.copyFileSync(path.join(src, file), path.join(destRenderer, file)); });\"",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer && npm run copy:assets",
+    "start:renderer": "webpack serve --mode development",
+    "start": "npm run build:main && npm run build:preload && npm run copy:assets && electron .",
+    "dev": "npm run build:main && npm run build:preload && npm run copy:assets && electron .",
+    "dev:hot": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && npm run dev\"",
+    "dev:watch": "concurrently \"npm run start:renderer\" \"tsc --project tsconfig.main.json --watch\" \"tsc --project tsconfig.preload.json --watch\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev:full": "concurrently \"npm run start:renderer\" \"tsc --project tsconfig.main.json --watch\" \"tsc --project tsconfig.preload.json --watch\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development nodemon --watch dist/main --watch dist/preload --exec electron .\"",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "dist:win": "electron-builder --win nsis",
+    "release:win": "electron-builder --win nsis -p onTagOrDraft"
+  },
+  "keywords": [
+    "video",
+    "editor",
+    "clip",
+    "manager",
+    "electron",
+    "ffmpeg",
+    "desktop"
+  ],
+  "author": "Timbergh <tim.berghman@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Timbergh/clipfolio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Timbergh/clipfolio/issues"
+  },
+  "homepage": "https://github.com/Timbergh/clipfolio#readme",
+  "type": "commonjs",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.6.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/node": "^24.9.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "css-loader": "^7.1.2",
+    "electron": "^38.4.0",
+    "electron-builder": "^26.0.12",
+    "html-webpack-plugin": "^5.6.4",
+    "nodemon": "^3.1.10",
+    "react-refresh": "^0.14.0",
+    "react-refresh-typescript": "^2.0.11",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "wait-on": "^9.0.1",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.2"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.13.12",
+    "@types/react-window": "^1.8.8",
+    "better-sqlite3": "^12.4.1",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.6.2",
+    "fluent-ffmpeg": "^2.1.3",
+    "ogl": "^1.0.11",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "react-window": "^2.2.1"
+  },
+  "build": {
+    "appId": "com.clipfolio.app",
+    "productName": "Clipfolio",
+    "icon": "src/assets/icon.ico",
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "src/assets/icon.ico",
+      "artifactName": "Clipfolio-${version}-Setup.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "src/assets/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "src/assets/icon.png"
+    },
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/@ffmpeg-installer/**",
+      "node_modules/@ffprobe-installer/**"
+    ],
+    "publish": [
+      { "provider": "github", "owner": "Timbergh", "repo": "clipfolio" }
+    ],
+    "npmRebuild": true,
+    "buildDependenciesFromSource": true,
+    "nodeGypRebuild": true
+  }
+}
