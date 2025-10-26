@@ -11,11 +11,10 @@ A desktop app for managing and editing your video clips. Trim, adjust audio, and
 ## What it does
 
 - **Clip library** - All your clips in one place with auto-generated thumbnails
-- **Non-destructive editing** - Trim and adjust audio without touching your original files
-- **Favorites** - Star the clips you want to keep and filter by favorites
-- **Folder organization** - Group clips by subfolder to keep things tidy
+- **Non-destructive editing** - Trim and adjust audio without touching the original files
+- **Favorites** - Star the clips you like and filter by favorites
 - **Multi-track audio** - Adjust volume for each audio track separately
-- **Export** - Export edited clips as new files when you're ready to share
+- **Export** - Export and download edited clips
 - **Discord sharing** - Compress clips to 10MB and drag-and-drop directly into Discord
 
 **[Download Latest Release](https://github.com/Timbergh/clipfolio/releases/latest)**
