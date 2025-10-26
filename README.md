@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/ClipfolioLogo.svg" alt="Clipfolio Logo" width="200"/>
+  <img src="src/assets/ClipfolioLogo.svg" alt="Clipfolio Logo" width="200"/>
 </div>
 
 # Clipfolio - A video clip manager
