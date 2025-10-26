@@ -117,8 +117,6 @@
     "publish": [
       { "provider": "github", "owner": "Timbergh", "repo": "clipfolio" }
     ],
-    "npmRebuild": true,
-    "buildDependenciesFromSource": true,
-    "nodeGypRebuild": true
+    "npmRebuild": false
   }
 }
