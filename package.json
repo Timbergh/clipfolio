@@ -17,7 +17,8 @@
     "dev:full": "concurrently \"npm run start:renderer\" \"tsc --project tsconfig.main.json --watch\" \"tsc --project tsconfig.preload.json --watch\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development nodemon --watch dist/main --watch dist/preload --exec electron .\"",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "dist:win": "electron-builder --win nsis",
-    "release:win": "electron-builder --win nsis -p onTagOrDraft"
+    "release:win": "electron-builder --win nsis -p onTagOrDraft",
+    "pack:win": "electron-builder --win nsis -p never"
   },
   "keywords": [
     "video",
