@@ -7,6 +7,7 @@ import LightRays from "../components/LightRays";
 import { VideoFile, VideoFileWithMetadata, SortBy, SortOrder } from "../types";
 import "../styles/LibraryView.css";
 import WindowControls from "../components/WindowControls";
+import LogoUrl from "../../assets/ClipfolioLogo.svg";
 
 const api = window.api;
 const path = window.path;
@@ -61,13 +62,13 @@ const LibraryView: React.FC = () => {
   useEffect(() => {
     if (!folderPath) return;
 
-    const handleFileAdded = (event: any, data: { filePath: string }) => {
-      // Add the new file to the library
+    const handleFileAdded = (data?: { filePath: string }) => {
+      if (!data?.filePath) return;
       addNewVideo(data.filePath);
     };
 
-    const handleFileRemoved = (event: any, data: { filePath: string }) => {
-      // Remove the file from the library
+    const handleFileRemoved = (data?: { filePath: string }) => {
+      if (!data?.filePath) return;
       removeVideo(data.filePath);
     };
 
@@ -413,8 +414,8 @@ const LibraryView: React.FC = () => {
         <div className="logo-container no-drag">
           <img
             className="app-logo"
-            src="/ClipfolioLogo.svg"
-            alt="Clipfolio Logo"
+            src={LogoUrl}
+            alt=""
             width="48"
             height="48"
           />

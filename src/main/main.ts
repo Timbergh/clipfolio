@@ -1,8 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell, protocol } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -15,55 +13,25 @@ const folderWatchers = new Map<string, fs.FSWatcher>();
 const watchedBaseFolders = new Map<string, string>();
 const videoExtensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv'];
 
-function findFfmpegPath(): string {
-  const possiblePaths = [
-    path.join(__dirname, '../../node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe'),
-    path.join(process.cwd(), 'node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe'),
-    'ffmpeg'
-  ];
-
-  for (const ffmpegPath of possiblePaths) {
-    if (fs.existsSync(ffmpegPath)) {
-      console.log('Found FFmpeg at:', ffmpegPath);
-      return ffmpegPath;
-    }
+function resolveFfmpeg(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'bin', 'ffmpeg.exe');
   }
-
-  console.warn('FFmpeg not found in expected locations, using system PATH');
-  return 'ffmpeg';
+  return path.join(process.cwd(), 'node_modules', '@ffmpeg-installer', 'win32-x64', 'ffmpeg.exe');
 }
 
-function findFfprobePath(): string {
-  const possiblePaths = [
-    path.join(__dirname, '../../node_modules/@ffprobe-installer/win32-x64/ffprobe.exe'),
-    path.join(process.cwd(), 'node_modules/@ffprobe-installer/win32-x64/ffprobe.exe'),
-    'ffprobe'
-  ];
-
-  for (const ffprobePath of possiblePaths) {
-    if (fs.existsSync(ffprobePath)) {
-      console.log('Found FFprobe at:', ffprobePath);
-      return ffprobePath;
-    }
+function resolveFfprobe(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'bin', 'ffprobe.exe');
   }
-
-  console.warn('FFprobe not found in expected locations, using system PATH');
-  return 'ffprobe';
+  return path.join(process.cwd(), 'node_modules', '@ffprobe-installer', 'win32-x64', 'ffprobe.exe');
 }
+
+ffmpeg.setFfmpegPath(resolveFfmpeg());
+ffmpeg.setFfprobePath(resolveFfprobe());
 
 // Ensure proper taskbar grouping & notifications on Windows.
 app.setAppUserModelId('com.clipfolio.app');
-
-// Prefer installer-provided binaries; fix .asar paths when packaged.
-// Fallback to original finders in dev or if the installers are missing.
-function fixAsarPath(p?: string) {
-  return p ? p.replace('app.asar', 'app.asar.unpacked') : p;
-}
-const installerFfmpegPath = fixAsarPath((ffmpegInstaller as any)?.path);
-const installerFfprobePath = fixAsarPath((ffprobeInstaller as any)?.path);
-
-ffmpeg.setFfmpegPath(installerFfmpegPath || findFfmpegPath());
-ffmpeg.setFfprobePath(installerFfprobePath || findFfprobePath());
 
 let mainWindow: BrowserWindow | null = null;
 

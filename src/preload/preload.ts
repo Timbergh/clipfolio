@@ -87,22 +87,27 @@ contextBridge.exposeInMainWorld('api', {
   readFileAsDataUrl: (filePath: string) => ipcRenderer.invoke('read-file-as-data-url', filePath),
 
   // Event listeners
-  on: (channel: string, func: (...args: any[]) => void) => {
+  on: (channel: string, func: (payload: any) => void) => {
     const validChannels = ['file-added', 'file-removed', 'export-progress'];
-    if (validChannels.includes(channel)) {
-      // Deliberately strip event as it includes `sender`
-      const subscription = (_event: any, ...args: any[]) => func(...args);
-      ipcRenderer.on(channel, subscription);
-      return () => {
-        ipcRenderer.removeListener(channel, subscription);
-      };
-    }
+    if (!validChannels.includes(channel)) return () => {};
+
+    const subscription = (_event: any, ...args: any[]) => {
+      const payload = args.length > 0 ? args[0] : undefined; // pass only the first arg
+      try {
+        func(payload);
+      } catch (e) {
+        console.error('[preload] listener error:', channel, e, { payload });
+      }
+    };
+
+    ipcRenderer.on(channel, subscription);
+    // return an unsubscribe fn you can call later
+    return () => ipcRenderer.removeListener(channel, subscription);
   },
-  removeListener: (channel: string, func: (...args: any[]) => void) => {
-    const validChannels = ['file-added', 'file-removed', 'export-progress'];
-    if (validChannels.includes(channel)) {
-      ipcRenderer.removeListener(channel, func);
-    }
+  removeListener: (channel: string, _func: (...args: any[]) => void) => {
+    // Use the unsubscribe function returned by `on(...)` instead,
+    // because we wrap the original callback.
+    console.warn('[preload] removeListener: use the function returned by on(channel, fn)');
   },
 });
 

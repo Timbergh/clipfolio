@@ -18,7 +18,8 @@
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "dist:win": "electron-builder --win nsis",
     "release:win": "electron-builder --win nsis -p onTagOrDraft",
-    "pack:win": "electron-builder --win nsis -p never"
+    "pack:win": "electron-builder --win nsis -p never",
+    "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
     "video",
@@ -42,14 +43,13 @@
   "type": "commonjs",
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "@ffprobe-installer/ffprobe": "^2.1.2",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.6.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node": "^24.9.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/react-window": "^1.8.8",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "css-loader": "^7.1.2",
@@ -59,6 +59,7 @@
     "nodemon": "^3.1.10",
     "react-refresh": "^0.14.0",
     "react-refresh-typescript": "^2.0.11",
+    "react-window": "^2.2.1",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.4",
     "typescript": "^5.9.3",
@@ -68,8 +69,9 @@
     "webpack-dev-server": "^5.2.2"
   },
   "dependencies": {
+    "@ffmpeg-installer/win32-x64": "^4.1.0",
+    "@ffprobe-installer/win32-x64": "^5.1.0",
     "@tanstack/react-virtual": "^3.13.12",
-    "@types/react-window": "^1.8.8",
     "better-sqlite3": "^12.4.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.6.2",
@@ -77,8 +79,7 @@
     "ogl": "^1.0.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.4",
-    "react-window": "^2.2.1"
+    "react-router-dom": "^7.9.4"
   },
   "build": {
     "appId": "com.clipfolio.app",
@@ -90,10 +91,18 @@
     "files": [
       "dist/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/@ffmpeg-installer/**",
+      "!node_modules/@ffprobe-installer/**"
+    ],
+    "extraResources": [
+      { "from": "node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",  "to": "bin/ffmpeg.exe" },
+      { "from": "node_modules/@ffprobe-installer/win32-x64/ffprobe.exe","to": "bin/ffprobe.exe" }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "src/assets/icon.ico",
       "artifactName": "Clipfolio-${version}-Setup.${ext}"
     },
@@ -110,12 +119,14 @@
       "icon": "src/assets/icon.png"
     },
     "asarUnpack": [
-      "**/*.node",
-      "node_modules/@ffmpeg-installer/**",
-      "node_modules/@ffprobe-installer/**"
+      "**/*.node"
     ],
     "publish": [
-      { "provider": "github", "owner": "Timbergh", "repo": "clipfolio" }
+      {
+        "provider": "github",
+        "owner": "Timbergh",
+        "repo": "clipfolio"
+      }
     ],
     "npmRebuild": false
   }

@@ -217,9 +217,14 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
       const audioCtx = new (window.AudioContext ||
         (window as any).webkitAudioContext)();
       const fileBuffer = await api.readFileBuffer(audioPath);
-      const arrayBuffer = fileBuffer.buffer.slice(
-        fileBuffer.byteOffset,
-        fileBuffer.byteOffset + fileBuffer.byteLength
+      const arrayBuffer = new ArrayBuffer(fileBuffer.byteLength);
+      const view = new Uint8Array(arrayBuffer);
+      view.set(
+        new Uint8Array(
+          fileBuffer.buffer,
+          fileBuffer.byteOffset,
+          fileBuffer.byteLength
+        )
       );
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
