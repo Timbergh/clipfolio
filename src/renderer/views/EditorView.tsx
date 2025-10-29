@@ -4,6 +4,7 @@ import VideoPlayer from "../components/VideoPlayer";
 import Timeline from "../components/Timeline";
 import VideoInfoPanel from "../components/VideoInfoPanel";
 import ExportPanel from "../components/ExportPanel";
+import { useGlowEffect } from "../hooks/useGlowEffect";
 import {
   VideoFile,
   AudioTrack,
@@ -34,6 +35,9 @@ const EditorView: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const video = (location.state as any)?.video as VideoFile;
+
+  // Initialize glow effect system
+  useGlowEffect();
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -856,7 +860,7 @@ const EditorView: React.FC = () => {
     >
       <div className="editor-view-overlay"></div>
       <header className="editor-header">
-        <button className="back-btn no-drag" onClick={handleBack}>
+        <button className="btn back-btn no-drag" onClick={handleBack} data-glow>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
@@ -874,10 +878,11 @@ const EditorView: React.FC = () => {
           Back to Library
         </button>
         <h2 className="video-title">{video.name}</h2>
-        <div className="header-actions no-drag">
+        <div className="header-actions">
           <button
-            className="header-btn header-export-btn"
+            className="btn header-export-btn no-drag"
             onClick={() => setShowExportPanel(true)}
+            data-glow
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -946,25 +951,87 @@ const EditorView: React.FC = () => {
           <div className="timeline-controls">
             <div className="playback-controls">
               <button
-                className="control-btn"
+                className="control-btn btn"
                 onClick={handleSkipToTrimStart}
                 title="Skip to Start"
+                data-glow="tiny"
               >
-                ⏮
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  className="play-control-btn-icon"
+                >
+                  <path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" />
+                  <path d="M3 20V4" />
+                </svg>
               </button>
               <button
-                className="control-btn play-btn"
+                className="control-btn play-btn btn"
                 onClick={handlePlayPause}
                 title={isPlaying ? "Pause" : "Play"}
+                data-glow="tiny"
               >
-                {isPlaying ? "⏸" : "▶"}
+                {isPlaying ? (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    className="play-control-btn-icon"
+                  >
+                    <rect x="14" y="3" width="5" height="18" rx="1" />
+                    <rect x="5" y="3" width="5" height="18" rx="1" />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    className="play-control-btn-icon"
+                  >
+                    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+                  </svg>
+                )}
               </button>
               <button
-                className="control-btn"
+                className="control-btn btn"
                 onClick={handleSkipToTrimEnd}
                 title="Skip to End"
+                data-glow="tiny"
               >
-                ⏭
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  className="play-control-btn-icon"
+                >
+                  <path d="M21 4v16" />
+                  <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" />
+                </svg>
               </button>
             </div>
           </div>
@@ -1004,8 +1071,9 @@ const EditorView: React.FC = () => {
         >
           <div className="export-modal" onClick={(e) => e.stopPropagation()}>
             <button
-              className="close-btn"
+              className="btn close-btn"
               onClick={() => setShowExportPanel(false)}
+              data-glow="tiny"
             >
               ×
             </button>

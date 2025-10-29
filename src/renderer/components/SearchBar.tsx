@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SortBy, SortOrder } from "../types";
+import { useGlowEffect } from "../hooks/useGlowEffect";
 import "../styles/SearchBar.css";
+import "../styles/GlowWrapper.css";
 
 interface SearchBarProps {
   searchQuery: string;
@@ -20,9 +22,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
   onSortOrderChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isHover, setIsHover] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Initialize glow effect system
+  useGlowEffect();
 
   const sortOptions: Array<{
     label: string;
@@ -62,25 +65,9 @@ const SearchBar: React.FC<SearchBarProps> = ({
     };
   }, []);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const root = containerRef.current;
-    if (!root) return;
-    const r = root.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * 100;
-    const y = ((e.clientY - r.top) / r.height) * 100;
-    root.style.setProperty("--mx", `${x}%`);
-    root.style.setProperty("--my", `${y}%`);
-  };
-
   return (
-    <div
-      ref={containerRef}
-      className={`search-bar ${isHover ? "is-hover" : ""}`}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setIsHover(true)}
-      onMouseLeave={() => setIsHover(false)}
-    >
-      <div className="search-input-wrapper glow-target">
+    <div className="search-bar" data-glow>
+      <div className="search-input-wrapper">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"
@@ -107,7 +94,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
 
       <div className="sort-controls" ref={dropdownRef}>
         <button
-          className={`sort-toggle glow-target ${isOpen ? "open" : ""}`}
+          className={`sort-toggle ${isOpen ? "open" : ""}`}
           onClick={() => setIsOpen((v) => !v)}
           aria-haspopup="listbox"
           aria-expanded={isOpen}

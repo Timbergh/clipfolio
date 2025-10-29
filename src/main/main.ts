@@ -5,8 +5,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import ffmpeg from 'fluent-ffmpeg';
 import * as db from './database';
+
+const execFileAsync = promisify(execFile);
 
 // File watcher state
 const folderWatchers = new Map<string, fs.FSWatcher>();
@@ -29,6 +33,84 @@ function resolveFfprobe(): string {
 
 ffmpeg.setFfmpegPath(resolveFfmpeg());
 ffmpeg.setFfprobePath(resolveFfprobe());
+
+// Helper function to validate if a video file is complete and readable
+async function isValidVideoFile(videoPath: string): Promise<boolean> {
+  try {
+    // Check if file exists and is accessible
+    const stats = await fs.promises.stat(videoPath);
+    if (stats.size === 0) {
+      console.log(`[Validation] File has zero size: ${videoPath}`);
+      return false;
+    }
+
+    // Check file stability (not actively being written)
+    // Wait 100ms and check if size changed
+    const initialSize = stats.size;
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const newStats = await fs.promises.stat(videoPath);
+    if (newStats.size !== initialSize) {
+      console.log(`[Validation] File is still being written: ${videoPath}`);
+      return false;
+    }
+
+    // Try to probe with a 5-second timeout
+    const ffprobePath = resolveFfprobe();
+    const probePromise = execFileAsync(ffprobePath, [
+      '-v', 'error',
+      '-show_entries', 'format=duration:stream=codec_type',
+      '-of', 'json',
+      '-i', videoPath
+    ]);
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Probe timeout')), 5000);
+    });
+
+    const { stdout } = await Promise.race([probePromise, timeoutPromise]);
+    const data = JSON.parse(stdout);
+
+    // Check if we have at least one video stream
+    if (!data.streams || data.streams.length === 0) {
+      console.log(`[Validation] No streams found: ${videoPath}`);
+      return false;
+    }
+
+    const hasVideoStream = data.streams.some((s: any) => s.codec_type === 'video');
+    if (!hasVideoStream) {
+      console.log(`[Validation] No video stream found: ${videoPath}`);
+      return false;
+    }
+
+    // Check if format has a valid duration
+    if (!data.format || !data.format.duration || parseFloat(data.format.duration) <= 0) {
+      console.log(`[Validation] Invalid duration: ${videoPath}`);
+      return false;
+    }
+
+    return true;
+  } catch (error: any) {
+    console.log(`[Validation] Failed to validate ${videoPath}:`, error.message);
+    return false;
+  }
+}
+
+// Helper function to run ffprobe with full metadata extraction
+async function ffprobeWithFullMetadata(videoPath: string): Promise<any> {
+  const ffprobePath = resolveFfprobe();
+  try {
+    const { stdout } = await execFileAsync(ffprobePath, [
+      '-show_format',
+      '-show_streams',
+      '-print_format', 'json',
+      '-i', videoPath
+    ]);
+    return JSON.parse(stdout);
+  } catch (error: any) {
+    console.error('FFprobe error:', error);
+    throw new Error(`Failed to probe video: ${error.message}`);
+  }
+}
 
 // Ensure proper taskbar grouping & notifications on Windows.
 app.setAppUserModelId('com.clipfolio.app');
@@ -201,21 +283,17 @@ app.whenReady().then(() => {
         return new Response(buffer, { status: 206, headers });
       }
 
-      const chunkSize = Math.min(1024 * 1024, fileSize);
-      const buffer = Buffer.alloc(chunkSize);
-      const fd = fs.openSync(normalizedPath, 'r');
-      fs.readSync(fd, buffer, 0, chunkSize, 0);
-      fs.closeSync(fd);
+      // For non-range requests, return full file
+      const fileContent = fs.readFileSync(normalizedPath);
 
       const headers = new Headers({
         'content-type': mimeType,
-        'content-length': String(chunkSize),
-        'content-range': `bytes 0-${chunkSize - 1}/${fileSize}`,
+        'content-length': String(fileSize),
         'accept-ranges': 'bytes',
         'cache-control': 'no-cache',
         'access-control-allow-origin': '*'
       });
-      return new Response(buffer, { status: 206, headers });
+      return new Response(fileContent, { status: 200, headers });
     } catch (error) {
       console.error('[local protocol] Error:', error);
       return new Response('Internal server error', { status: 500, headers: { 'content-type': 'text/plain' } });
@@ -337,15 +415,7 @@ ipcMain.handle('scan-videos', async (event, folderPath: string) => {
 });
 
 ipcMain.handle('get-video-metadata', async (event, videoPath: string) => {
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(videoPath, (err, metadata) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(metadata);
-      }
-    });
-  });
+  return await ffprobeWithFullMetadata(videoPath);
 });
 
 // Cached metadata (ffprobe) keyed by path + mtime + size
@@ -394,26 +464,27 @@ ipcMain.handle('get-cached-metadata', async (event, videoPath: string) => {
   // Check if already being fetched
   let p = metaTasks.get(cachePath);
   if (!p) {
-    p = new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(videoPath, (err, metadata) => {
-        if (err) {
-          reject(err);
-        } else {
-          try {
-            const dir = path.dirname(cachePath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(cachePath, JSON.stringify(metadata));
-            // Store in memory cache
-            metadataMemoryCache.set(videoPath, metadata);
-          } catch (e) {
-            console.error('[Metadata Cache] Error writing cache:', e);
-          }
-          resolve(metadata);
+    p = (async () => {
+      try {
+        const metadata = await ffprobeWithFullMetadata(videoPath);
+        try {
+          const dir = path.dirname(cachePath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(cachePath, JSON.stringify(metadata));
+          // Store in memory cache
+          metadataMemoryCache.set(videoPath, metadata);
+        } catch (e) {
+          console.error('[Metadata Cache] Error writing cache:', e);
         }
-      });
-    }).finally(() => {
-      try { metaTasks.delete(cachePath); } catch {}
-    });
+        return metadata;
+      } catch (error: any) {
+        console.error('[Metadata] Error fetching metadata:', error.message);
+        // Return null for files that can't be probed (corrupted or actively recording)
+        return null;
+      } finally {
+        try { metaTasks.delete(cachePath); } catch {}
+      }
+    })();
     metaTasks.set(cachePath, p);
   }
   return await p;
@@ -447,54 +518,134 @@ function getThumbCacheDir(): string {
   return dir;
 }
 
-function computeCachedThumbPath(videoPath: string): string {
+function computeCachedThumbPath(videoPath: string, trimStart?: number, trimEnd?: number): string {
   try {
     const stat = fs.statSync(videoPath);
-    const hash = crypto
+    const hashInput = crypto
       .createHash('sha1')
       .update(videoPath)
       .update(String(stat.mtimeMs))
-      .update(String(stat.size))
-      .digest('hex')
-      .slice(0, 16);
+      .update(String(stat.size));
+
+    // Include trim data in hash if present
+    if (trimStart !== undefined && trimEnd !== undefined) {
+      hashInput.update(`trim-${trimStart}-${trimEnd}`);
+    }
+
+    const hash = hashInput.digest('hex').slice(0, 16);
     const base = path.basename(videoPath, path.extname(videoPath));
     return path.join(getThumbCacheDir(), `${base}-${hash}.jpg`);
   } catch {
-    const hash = crypto.createHash('sha1').update(videoPath).digest('hex').slice(0, 16);
+    const hashInput = crypto.createHash('sha1').update(videoPath);
+
+    // Include trim data in hash if present
+    if (trimStart !== undefined && trimEnd !== undefined) {
+      hashInput.update(`trim-${trimStart}-${trimEnd}`);
+    }
+
+    const hash = hashInput.digest('hex').slice(0, 16);
     const base = path.basename(videoPath, path.extname(videoPath));
     return path.join(getThumbCacheDir(), `${base}-${hash}.jpg`);
   }
 }
 
-ipcMain.handle('get-cached-thumbnail', async (event, videoPath: string) => {
-  const outPath = computeCachedThumbPath(videoPath);
+ipcMain.handle('get-cached-thumbnail', async (event, videoPath: string, duration?: number, trimStart?: number, trimEnd?: number) => {
+  const outPath = computeCachedThumbPath(videoPath, trimStart, trimEnd);
+
+  // Debug logging
+  console.log('Thumbnail request:', {
+    videoPath: path.basename(videoPath),
+    duration,
+    trimStart,
+    trimEnd,
+    cachePath: path.basename(outPath)
+  });
+
   try {
     if (fs.existsSync(outPath)) {
+      console.log('Thumbnail cache HIT:', path.basename(outPath));
       return outPath;
+    } else {
+      // Check if old cache exists (without trim data in hash)
+      const oldPath = computeCachedThumbPath(videoPath);
+      if (fs.existsSync(oldPath) && (!trimStart || !trimEnd)) {
+        console.log('Using old thumbnail cache:', path.basename(oldPath));
+        return oldPath;
+      }
+      console.log('Thumbnail cache MISS - generating new thumbnail');
     }
-  } catch {}
+  } catch (err) {
+    console.error('Error checking thumbnail cache:', err);
+  }
 
   let task = thumbTasks.get(outPath);
   if (!task) {
+    console.log('Creating new thumbnail generation task. Active tasks:', thumbTasks.size);
     task = new Promise<string>((resolve, reject) => {
       try {
         const dir = path.dirname(outPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       } catch {}
-      ffmpeg(videoPath)
-        .screenshots({
-          timestamps: ['10%'],
-          filename: path.basename(outPath),
-          folder: path.dirname(outPath),
-          size: '960x540'
+
+      let timeoutId: NodeJS.Timeout | null = null;
+      let command: ffmpeg.FfmpegCommand | null = null;
+
+      // Calculate thumbnail timestamp
+      let timestamp: number;
+      if (trimStart !== undefined && trimEnd !== undefined && trimStart >= 0 && trimEnd > trimStart) {
+        // If there's a trim, use the start of the trim
+        timestamp = trimStart;
+        console.log('Using trimStart:', trimStart);
+      } else if (duration !== undefined && duration > 0) {
+        // If no trim, use middle of video
+        timestamp = duration / 2;
+        console.log('Using 50% of duration:', duration / 2);
+      } else {
+        // Fallback to 1 second if no duration provided
+        timestamp = 1;
+        console.log('Using fallback 1 second');
+      }
+
+      // Set a 10-second timeout for thumbnail generation
+      timeoutId = setTimeout(() => {
+        if (command) {
+          command.kill('SIGKILL');
+        }
+        reject(new Error('Thumbnail generation timeout'));
+      }, 10000);
+
+      console.log('Starting ffmpeg thumbnail generation at timestamp:', timestamp);
+
+      // Use input seeking (-ss before -i) for faster seeking
+      command = ffmpeg(videoPath)
+        .seekInput(timestamp)
+        .outputOptions([
+          '-vframes 1',
+          '-s 960x540'
+        ])
+        .output(outPath)
+        .on('end', () => {
+          console.log('Thumbnail generated successfully:', path.basename(outPath));
+          if (timeoutId) clearTimeout(timeoutId);
+          resolve(outPath);
         })
-        .on('end', () => resolve(outPath))
-        .on('error', (err) => reject(err));
+        .on('error', (err) => {
+          console.error('ffmpeg thumbnail error:', err.message);
+          if (timeoutId) clearTimeout(timeoutId);
+          reject(err);
+        });
+
+      command.run();
     })
       .finally(() => {
-        try { thumbTasks.delete(outPath); } catch {}
+        try {
+          thumbTasks.delete(outPath);
+          console.log('Thumbnail task completed. Remaining tasks:', thumbTasks.size);
+        } catch {}
       });
     thumbTasks.set(outPath, task);
+  } else {
+    console.log('Reusing existing thumbnail generation task');
   }
   return await task;
 });
@@ -507,14 +658,9 @@ ipcMain.handle('extract-audio-tracks', async (event, videoPath: string, outputDi
       }
 
       // First, get metadata to know how many audio tracks there are
-      ffmpeg.ffprobe(videoPath, (err, metadata) => {
-        if (err) {
-          console.error('FFprobe error:', err);
-          reject(err);
-          return;
-        }
-
-        const audioStreams = metadata.streams.filter(s => s.codec_type === 'audio');
+      try {
+        const metadata = await ffprobeWithFullMetadata(videoPath);
+        const audioStreams = metadata.streams.filter((s: any) => s.codec_type === 'audio');
 
         if (audioStreams.length === 0) {
           resolve([]);
@@ -526,7 +672,7 @@ ipcMain.handle('extract-audio-tracks', async (event, videoPath: string, outputDi
         let hasError = false;
 
         // Extract each audio track separately
-        audioStreams.forEach((stream, index) => {
+        audioStreams.forEach((stream: any, index: number) => {
           const outputFile = path.join(outputDir, `audio_track_${index}.wav`);
 
 
@@ -558,7 +704,10 @@ ipcMain.handle('extract-audio-tracks', async (event, videoPath: string, outputDi
             })
             .run();
         });
-      });
+      } catch (metadataError) {
+        console.error('FFprobe error:', metadataError);
+        reject(metadataError);
+      }
     } catch (error) {
       console.error('Extract audio tracks error:', error);
       reject(error);
@@ -634,39 +783,35 @@ ipcMain.handle('get-cached-extracted-audio', async (event, videoPath: string, fo
   let task = audioExtractTasks.get(cacheDir);
   if (task) return await task;
 
-  task = new Promise<string[]>((resolve, reject) => {
+  task = (async () => {
     try {
       ensureDir();
-      ffmpeg.ffprobe(videoPath, (err, metadata) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+      const metadata = await ffprobeWithFullMetadata(videoPath);
 
-        const audioStreams = (metadata.streams || []).filter((s: any) => s.codec_type === 'audio');
-        const expected = audioStreams.length;
-        if (expected <= 0) {
-          resolve([]);
-          return;
-        }
+      const audioStreams = (metadata.streams || []).filter((s: any) => s.codec_type === 'audio');
+      const expected = audioStreams.length;
+      if (expected <= 0) {
+        return [];
+      }
 
-        const existing = checkExisting(expected);
-        if (existing && !forceRefresh) {
-          resolve(existing);
-          return;
-        }
+      const existing = checkExisting(expected);
+      if (existing && !forceRefresh) {
+        return existing;
+      }
 
-        // Clean up any corrupted cache files before extraction
-        console.log('[Audio Extract] Cleaning up cache before extraction');
-        cleanupCache();
-        ensureDir();
+      // Clean up any corrupted cache files before extraction
+      console.log('[Audio Extract] Cleaning up cache before extraction');
+      cleanupCache();
+      ensureDir();
+
+      return new Promise<string[]>((resolve, reject) => {
 
         const outputs: string[] = Array.from({ length: expected }, (_, i) => path.join(cacheDir, `audio_track_${i}.wav`));
 
         let completed = 0;
         let hasError = false;
 
-        audioStreams.forEach((stream, index) => {
+        audioStreams.forEach((stream: any, index: number) => {
           const outputFile = outputs[index];
 
           const cmd = ffmpeg(videoPath)
@@ -732,11 +877,11 @@ ipcMain.handle('get-cached-extracted-audio', async (event, videoPath: string, fo
       });
     } catch (e) {
       cleanupCache();
-      reject(e);
+      throw e;
+    } finally {
+      try { audioExtractTasks.delete(cacheDir); } catch {}
     }
-  }).finally(() => {
-    try { audioExtractTasks.delete(cacheDir); } catch {}
-  });
+  })();
 
   audioExtractTasks.set(cacheDir, task);
   return await task;
@@ -851,33 +996,73 @@ ipcMain.handle('export-video', async (
         .setDuration(duration);
 
       const type: 'video' | 'mp3' = outputType === 'mp3' ? 'mp3' : 'video';
+      const outputExt = path.extname(outputPath).toLowerCase();
 
       if (type === 'mp3') {
-        command = command
-          .audioCodec('libmp3lame')
-          .outputOptions(['-y', '-b:a 192k']);
+        // Audio-only export - determine codec by extension
+        if (outputExt === '.mp3') {
+          command = command
+            .audioCodec('libmp3lame')
+            .outputOptions(['-y', '-b:a 192k']);
+        } else if (outputExt === '.wav') {
+          command = command
+            .audioCodec('pcm_s16le')
+            .outputOptions(['-y', '-ar 48000', '-ac 2']);
+        } else if (outputExt === '.aac') {
+          command = command
+            .audioCodec('aac')
+            .outputOptions(['-y', '-b:a 192k']);
+        } else {
+          // Default to mp3
+          command = command
+            .audioCodec('libmp3lame')
+            .outputOptions(['-y', '-b:a 192k']);
+        }
       } else if (quality === 'compressed') {
         const audioBitrateKbps = 128;
         if (!videoBitrateKbps) {
           videoBitrateKbps = 800;
         }
+
+        // Video codec selection based on container
+        let videoCodec = 'libx264';
+        let audioCodec = 'aac';
+        const baseOptions = ['-y', '-preset fast'];
+
+        if (outputExt === '.avi') {
+          videoCodec = 'mpeg4';
+          audioCodec = 'libmp3lame';
+        }
+
         command = command
-          .videoCodec('libx264')
-          .audioCodec('aac')
+          .videoCodec(videoCodec)
+          .audioCodec(audioCodec)
           .outputOptions([
-            '-y',
-            '-preset fast',
+            ...baseOptions,
             `-b:v ${videoBitrateKbps}k`,
             `-maxrate ${Math.max(100, Math.floor(videoBitrateKbps * 1.05))}k`,
             `-bufsize ${Math.max(200, Math.floor(videoBitrateKbps * 2))}k`,
-            `-b:a ${audioBitrateKbps}k`,
-            '-movflags +faststart'
+            `-b:a ${audioBitrateKbps}k`
           ]);
+
+        if (outputExt === '.mp4' || outputExt === '.mov') {
+          command = command.outputOptions(['-movflags +faststart']);
+        }
       } else {
+        // Full quality - copy video stream
+        let audioCodec = 'aac';
+        if (outputExt === '.avi') {
+          audioCodec = 'libmp3lame';
+        }
+
         command = command
           .outputOptions(['-c:v copy'])
-          .audioCodec('aac')
-          .outputOptions(['-movflags +faststart']);
+          .audioCodec(audioCodec)
+          .outputOptions(['-y']);
+
+        if (outputExt === '.mp4' || outputExt === '.mov') {
+          command = command.outputOptions(['-movflags +faststart']);
+        }
       }
 
       const { filterParts, mapOptions } = buildFilterAndMaps(audioMode || 'combine', type);
@@ -1194,7 +1379,7 @@ ipcMain.handle('watch-folder', async (event, folderPath: string) => {
       }
 
       // Set new timer - only process after events stop
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         try {
           debounceTimers.delete(fullPath);
 
@@ -1208,14 +1393,25 @@ ipcMain.handle('watch-folder', async (event, folderPath: string) => {
             // Verify file is readable and has size > 0
             try {
               const stat = fs.statSync(fullPath);
-              if (stat.size > 0) {
-                console.log('[FileWatcher] New file detected, adding to library:', fullPath);
-                existingFiles.add(fullPath);
-                if (mainWindow) {
-                  mainWindow.webContents.send('file-added', { filePath: fullPath });
-                }
-              } else {
-                console.log('[FileWatcher] File has 0 size, waiting...', fullPath);
+              if (stat.size === 0) {
+                console.log('[FileWatcher] File has 0 size, ignoring...', fullPath);
+                return;
+              }
+
+              // Check file stability - wait 200ms and verify size hasn't changed
+              const initialSize = stat.size;
+              await new Promise(resolve => setTimeout(resolve, 200));
+              const newStat = fs.statSync(fullPath);
+
+              if (newStat.size !== initialSize) {
+                console.log('[FileWatcher] File is still being written, will retry...', fullPath);
+                return;
+              }
+
+              console.log('[FileWatcher] New file detected, adding to library:', fullPath);
+              existingFiles.add(fullPath);
+              if (mainWindow) {
+                mainWindow.webContents.send('file-added', { filePath: fullPath });
               }
             } catch (err) {
               console.log('[FileWatcher] File not readable yet:', fullPath, err);
@@ -1366,6 +1562,68 @@ ipcMain.handle('read-file-buffer', async (event, filePath: string) => {
     return fileBuffer;
   } catch (error) {
     console.error('[read-file-buffer] Error:', error);
+    throw error;
+  }
+});
+
+// Clear all app caches
+ipcMain.handle('clear-cache', async () => {
+  try {
+    const tmpDir = os.tmpdir();
+    const cacheDirs = [
+      path.join(tmpDir, 'clipfolio-meta'),
+      path.join(tmpDir, 'clipfolio-thumbs'),
+      path.join(tmpDir, 'clipfolio-audio')
+    ];
+
+    let totalCleared = 0;
+    let errors: string[] = [];
+
+    // Clear each cache directory
+    for (const cacheDir of cacheDirs) {
+      try {
+        if (fs.existsSync(cacheDir)) {
+          const files = fs.readdirSync(cacheDir);
+          for (const file of files) {
+            try {
+              const filePath = path.join(cacheDir, file);
+              const stat = fs.statSync(filePath);
+              if (stat.isDirectory()) {
+                // Recursively delete subdirectories
+                fs.rmSync(filePath, { recursive: true, force: true });
+              } else {
+                fs.unlinkSync(filePath);
+              }
+              totalCleared++;
+            } catch (fileError) {
+              const errorMsg = `Failed to delete ${file}: ${fileError instanceof Error ? fileError.message : String(fileError)}`;
+              errors.push(errorMsg);
+              console.warn('[Cache Clear]', errorMsg);
+            }
+          }
+        }
+      } catch (dirError) {
+        const errorMsg = `Failed to access cache directory ${cacheDir}: ${dirError instanceof Error ? dirError.message : String(dirError)}`;
+        errors.push(errorMsg);
+        console.warn('[Cache Clear]', errorMsg);
+      }
+    }
+
+    // Clear in-memory caches
+    metadataMemoryCache.clear();
+    metaTasks.clear();
+    thumbTasks.clear();
+    audioExtractTasks.clear();
+
+    console.log(`[Cache Clear] Cleared ${totalCleared} cache files`);
+    
+    return {
+      success: true,
+      filesCleared: totalCleared,
+      errors: errors.length > 0 ? errors : undefined
+    };
+  } catch (error) {
+    console.error('[Cache Clear] Error clearing cache:', error);
     throw error;
   }
 });

@@ -1,6 +1,6 @@
 {
   "name": "clipfolio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A simple video clip manager",
   "main": "dist/main/main.js",
   "scripts": {
@@ -59,7 +59,7 @@
     "nodemon": "^3.1.10",
     "react-refresh": "^0.14.0",
     "react-refresh-typescript": "^2.0.11",
-    "react-window": "^2.2.1",
+    "react-window": "^2.2.2",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.4",
     "typescript": "^5.9.3",
@@ -96,8 +96,14 @@
       "!node_modules/@ffprobe-installer/**"
     ],
     "extraResources": [
-      { "from": "node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",  "to": "bin/ffmpeg.exe" },
-      { "from": "node_modules/@ffprobe-installer/win32-x64/ffprobe.exe","to": "bin/ffprobe.exe" }
+      {
+        "from": "node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",
+        "to": "bin/ffmpeg.exe"
+      },
+      {
+        "from": "node_modules/@ffprobe-installer/win32-x64/ffprobe.exe",
+        "to": "bin/ffprobe.exe"
+      }
     ],
     "win": {
       "target": [

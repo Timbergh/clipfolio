@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { VideoMetadata } from "../types";
+import { useGlowEffect } from "../hooks/useGlowEffect";
 import "../styles/VideoInfoPanel.css";
 
 interface VideoInfoPanelProps {
@@ -21,6 +22,9 @@ const VideoInfoPanel: React.FC<VideoInfoPanelProps> = ({
   isFavorite,
   onToggleFavorite,
 }) => {
+  // Initialize glow effect system
+  useGlowEffect();
+
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const formatFileSize = (bytes?: number): string => {
@@ -66,9 +70,10 @@ const VideoInfoPanel: React.FC<VideoInfoPanelProps> = ({
       className={`video-info-panel-wrapper ${isCollapsed ? "collapsed" : ""}`}
     >
       <button
-        className="collapse-toggle"
+        className="collapse-toggle btn"
         onClick={() => setIsCollapsed(!isCollapsed)}
         aria-label={isCollapsed ? "Expand panel" : "Collapse panel"}
+        data-glow="tiny"
       >
         {isCollapsed ? (
           <svg

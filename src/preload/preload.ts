@@ -32,7 +32,8 @@ contextBridge.exposeInMainWorld('api', {
   // Video metadata and thumbnails
   getVideoMetadata: (videoPath: string) => ipcRenderer.invoke('get-video-metadata', videoPath),
   getCachedMetadata: (videoPath: string) => ipcRenderer.invoke('get-cached-metadata', videoPath),
-  getCachedThumbnail: (videoPath: string) => ipcRenderer.invoke('get-cached-thumbnail', videoPath),
+  getCachedThumbnail: (videoPath: string, duration?: number, trimStart?: number, trimEnd?: number) =>
+    ipcRenderer.invoke('get-cached-thumbnail', videoPath, duration, trimStart, trimEnd),
   generateThumbnail: (videoPath: string, outputPath: string, timestampSeconds?: number) =>
     ipcRenderer.invoke('generate-thumbnail', videoPath, outputPath, timestampSeconds),
   generateTimelineThumbnails: (videoPath: string, outputDir: string, count?: number) =>
@@ -86,6 +87,9 @@ contextBridge.exposeInMainWorld('api', {
   readFileBuffer: (filePath: string) => ipcRenderer.invoke('read-file-buffer', filePath),
   readFileAsDataUrl: (filePath: string) => ipcRenderer.invoke('read-file-as-data-url', filePath),
 
+  // Cache management
+  clearCache: () => ipcRenderer.invoke('clear-cache'),
+
   // Event listeners
   on: (channel: string, func: (payload: any) => void) => {
     const validChannels = ['file-added', 'file-removed', 'export-progress'];
@@ -115,8 +119,18 @@ contextBridge.exposeInMainWorld('api', {
 function filePathToLocalURL(filePath: string): string {
   // Normalize path and convert backslashes to forward slashes
   const normalized = path.normalize(filePath).replace(/\\/g, '/');
+  // URL encode the path but preserve forward slashes and colons in drive letters
+  // Split by /, encode each segment, then rejoin
+  const segments = normalized.split('/');
+  const encoded = segments.map((segment: string, index: number) => {
+    // Don't encode drive letter colons (e.g., "C:")
+    if (index === 0 && segment.match(/^[A-Za-z]:$/)) {
+      return segment;
+    }
+    return encodeURIComponent(segment);
+  }).join('/');
   // Ensure proper URL format: local:///C:/Users/... (three slashes for absolute paths)
-  return `local:///${normalized}`;
+  return `local:///${encoded}`;
 }
 
 // Expose safe Node.js modules

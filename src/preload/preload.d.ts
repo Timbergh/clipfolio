@@ -14,7 +14,7 @@ export interface IElectronAPI {
   startDrag: (payload: { filePath: string; iconPath?: string }) => Promise<void>;
   getVideoMetadata: (videoPath: string) => Promise<any>;
   getCachedMetadata: (videoPath: string) => Promise<any>;
-  getCachedThumbnail: (videoPath: string) => Promise<string>;
+  getCachedThumbnail: (videoPath: string, duration?: number, trimStart?: number, trimEnd?: number) => Promise<string>;
   generateThumbnail: (videoPath: string, outputPath: string, timestampSeconds?: number) => Promise<string>;
   generateTimelineThumbnails: (videoPath: string, outputDir: string, count?: number) => Promise<string[]>;
   getClipHash: (filepath: string, duration?: number | null) => Promise<string>;

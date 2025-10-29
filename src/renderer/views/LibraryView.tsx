@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import VideoGrid from "../components/VideoGrid";
 import VirtualizedVideoGrid from "../components/VirtualizedVideoGrid";
 import SearchBar from "../components/SearchBar";
+import { useGlowEffect } from "../hooks/useGlowEffect";
 import LightRays from "../components/LightRays";
 import { VideoFile, VideoFileWithMetadata, SortBy, SortOrder } from "../types";
 import "../styles/LibraryView.css";
+import "../styles/GlowWrapper.css";
 import WindowControls from "../components/WindowControls";
 import LogoUrl from "../../assets/ClipfolioLogo.svg";
 
@@ -41,6 +42,9 @@ const LibraryView: React.FC = () => {
   });
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const hasLoadedRef = React.useRef(false);
+
+  // Initialize glow effect system
+  useGlowEffect();
 
   // Load app version on mount
   useEffect(() => {
@@ -135,6 +139,29 @@ const LibraryView: React.FC = () => {
       const concurrency = 8; // Increased for faster loading
       const result: VideoFileWithMetadata[] = [...initialVideos];
       let index = 0;
+      let lastUpdateTime = 0;
+      const updateInterval = 500; // Update at most every 500ms
+      let pendingUpdate = false;
+
+      const scheduleUpdate = () => {
+        if (pendingUpdate) return;
+        const now = Date.now();
+        const timeSinceLastUpdate = now - lastUpdateTime;
+
+        if (timeSinceLastUpdate >= updateInterval) {
+          // Update immediately
+          setVideos([...result]);
+          lastUpdateTime = now;
+        } else {
+          // Schedule update for later
+          pendingUpdate = true;
+          setTimeout(() => {
+            setVideos([...result]);
+            lastUpdateTime = Date.now();
+            pendingUpdate = false;
+          }, updateInterval - timeSinceLastUpdate);
+        }
+      };
 
       await Promise.all(
         Array.from({ length: concurrency }, async () => {
@@ -146,8 +173,9 @@ const LibraryView: React.FC = () => {
               const metadata = await api.getCachedMetadata(current.path);
               const duration = metadata?.format?.duration || 0;
 
-              // Get content hash and favorite status
-              const contentHash = await api.getClipHash(current.path);
+              // Get content hash and favorite status (even for corrupted files)
+              // IMPORTANT: Pass duration to ensure consistent hash generation
+              const contentHash = await api.getClipHash(current.path, duration);
               const isFavorite = await api.isFavorite(contentHash);
 
               // Get saved edits
@@ -164,15 +192,11 @@ const LibraryView: React.FC = () => {
 
               result[currentIndex] = enrichedVideo;
 
-              // Update state progressively (batch updates every 10 videos for performance)
-              if (
-                currentIndex % 10 === 0 ||
-                currentIndex === scannedVideos.length - 1
-              ) {
-                setVideos([...result]);
-              }
+              // Schedule time-based batch update instead of count-based
+              scheduleUpdate();
             } catch (error) {
               console.error("Error loading video data:", error);
+              // Add video with placeholder data so user can see it exists
               result[currentIndex] = {
                 ...current,
                 duration: 0,
@@ -204,7 +228,8 @@ const LibraryView: React.FC = () => {
       const duration = metadata?.format?.duration || 0;
 
       // Get content hash and favorite status
-      const contentHash = await api.getClipHash(filePath);
+      // IMPORTANT: Pass duration to ensure consistent hash generation
+      const contentHash = await api.getClipHash(filePath, duration);
       const isFavorite = await api.isFavorite(contentHash);
 
       // Get saved edits
@@ -273,7 +298,7 @@ const LibraryView: React.FC = () => {
     setFilteredVideos(result);
   }, [searchQuery, sortBy, sortOrder, videos, showFavoritesOnly]);
 
-  const handleVideoSelect = (video: VideoFile) => {
+  const handleVideoSelect = React.useCallback((video: VideoFile) => {
     // Show black overlay and hide light rays immediately
     if ((window as any).__showOverlay) {
       (window as any).__showOverlay();
@@ -281,9 +306,9 @@ const LibraryView: React.FC = () => {
 
     // Navigate immediately
     navigate("/editor", { state: { video } });
-  };
+  }, [navigate]);
 
-  const handleToggleFavorite = async (video: VideoFileWithMetadata) => {
+  const handleToggleFavorite = React.useCallback(async (video: VideoFileWithMetadata) => {
     if (!video.contentHash) return;
 
     try {
@@ -294,7 +319,7 @@ const LibraryView: React.FC = () => {
         duration: video.duration || null,
       });
 
-      // Update the local state
+      // Update videos state - filteredVideos will be updated by the useEffect
       setVideos((prevVideos) =>
         prevVideos.map((v) =>
           v.path === video.path ? { ...v, isFavorite: result.isFavorite } : v
@@ -303,9 +328,9 @@ const LibraryView: React.FC = () => {
     } catch (error) {
       console.error("Error toggling favorite:", error);
     }
-  };
+  }, []);
 
-  const handleToggleSelect = (videoPath: string) => {
+  const handleToggleSelect = React.useCallback((videoPath: string) => {
     setSelectedVideos((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(videoPath)) {
@@ -315,7 +340,7 @@ const LibraryView: React.FC = () => {
       }
       return newSet;
     });
-  };
+  }, []);
 
   const handleSelectAll = () => {
     const allPaths = new Set(filteredVideos.map((v) => v.path));
@@ -355,11 +380,19 @@ const LibraryView: React.FC = () => {
         selectedVideos.has(v.path)
       );
 
+      // Check if all selected videos are already favorited
+      const allFavorited = selectedVideoObjects.every(
+        (video) => video.isFavorite
+      );
+
+      // If all are favorited, unfavorite all; otherwise, favorite all
+      const targetFavoriteState = !allFavorited;
+
       for (const video of selectedVideoObjects) {
         if (!video.contentHash) continue;
 
-        // Only favorite if not already favorited
-        if (!video.isFavorite) {
+        // Only toggle if the current state differs from target state
+        if (video.isFavorite !== targetFavoriteState) {
           await api.toggleFavorite({
             contentHash: video.contentHash,
             filepath: video.path,
@@ -372,14 +405,16 @@ const LibraryView: React.FC = () => {
       // Update local state
       setVideos((prevVideos) =>
         prevVideos.map((v) =>
-          selectedVideos.has(v.path) ? { ...v, isFavorite: true } : v
+          selectedVideos.has(v.path)
+            ? { ...v, isFavorite: targetFavoriteState }
+            : v
         )
       );
 
       setSelectedVideos(new Set());
     } catch (error) {
-      console.error("Error favoriting selected:", error);
-      alert("Failed to favorite some clips. See console for details.");
+      console.error("Error toggling favorite selected:", error);
+      alert("Failed to toggle favorite status. See console for details.");
     }
   };
 
@@ -411,9 +446,9 @@ const LibraryView: React.FC = () => {
   return (
     <div className="library-view">
       <header className="library-header">
-        <div className="logo-container no-drag">
+        <div className="logo-container">
           <img
-            className="app-logo"
+            className="app-logo no-drag"
             src={LogoUrl}
             alt=""
             width="48"
@@ -426,15 +461,24 @@ const LibraryView: React.FC = () => {
             <span className="version">{appVersion}</span>
           </h1>
         </div>
-        <div className="library-header-actions no-drag">
-          <button className="folder-select-btn" onClick={handleSelectFolder}>
+        <div className="library-header-actions">
+          <button
+            className="btn folder-select-btn no-drag"
+            onClick={handleSelectFolder}
+            data-glow
+          >
             {folderPath ? "Change Folder" : "Select Folder"}
           </button>
           <WindowControls />
         </div>
       </header>
 
-      <div className="library-content" ref={scrollParentRef}>
+      <div
+        className={`library-content ${
+          selectedVideos.size > 0 ? "has-selection-bar" : ""
+        }`}
+        ref={scrollParentRef}
+      >
         <LightRays
           raysOrigin="top-center"
           raysColor="#ffffff"
@@ -447,59 +491,6 @@ const LibraryView: React.FC = () => {
           distortion={0.05}
           className="custom-rays"
         />
-        {selectedVideos.size > 0 && (
-          <div className="selection-action-bar">
-            <div className="selection-info">
-              <span className="selection-count">
-                {selectedVideos.size} selected
-              </span>
-              <button className="deselect-all-btn" onClick={handleDeselectAll}>
-                Clear
-              </button>
-            </div>
-            <div className="selection-actions">
-              <button
-                className="action-btn favorite-btn"
-                onClick={handleFavoriteSelected}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                Favorite Selected
-              </button>
-              <button
-                className="action-btn trash-btn"
-                onClick={handleTrashSelected}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-                Move to Trash
-              </button>
-            </div>
-          </div>
-        )}
         <div className="library-controls">
           <SearchBar
             searchQuery={searchQuery}
@@ -511,9 +502,10 @@ const LibraryView: React.FC = () => {
           />
           <div className="filter-toggles">
             <button
-              className={`filter-toggle-btn ${
+              className={`btn filter-toggle-btn ${
                 showFavoritesOnly ? "active" : ""
               }`}
+              data-glow
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
               title="Show favorites only"
             >
@@ -533,7 +525,10 @@ const LibraryView: React.FC = () => {
               Favorites Only
             </button>
             <button
-              className={`filter-toggle-btn ${groupByFolder ? "active" : ""}`}
+              className={`btn filter-toggle-btn ${
+                groupByFolder ? "active" : ""
+              }`}
+              data-glow
               onClick={() => setGroupByFolder(!groupByFolder)}
               title="Group clips by folder"
             >
@@ -542,7 +537,7 @@ const LibraryView: React.FC = () => {
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"
-                fill="none"
+                fill={groupByFolder ? "currentColor" : "none"}
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
@@ -581,28 +576,18 @@ const LibraryView: React.FC = () => {
                     {group.folder === "Root" ? "Root Folder" : group.folder}{" "}
                     <span className="group-count">({group.videos.length})</span>
                   </h3>
-                  {group.videos.length > 100 ? (
-                    <VirtualizedVideoGrid
-                      videos={group.videos}
-                      onVideoSelect={handleVideoSelect}
-                      onToggleFavorite={handleToggleFavorite}
-                      selectedVideos={selectedVideos}
-                      onToggleSelect={handleToggleSelect}
-                      scrollParentRef={scrollParentRef}
-                    />
-                  ) : (
-                    <VideoGrid
-                      videos={group.videos}
-                      onVideoSelect={handleVideoSelect}
-                      onToggleFavorite={handleToggleFavorite}
-                      selectedVideos={selectedVideos}
-                      onToggleSelect={handleToggleSelect}
-                    />
-                  )}
+                  <VirtualizedVideoGrid
+                    videos={group.videos}
+                    onVideoSelect={handleVideoSelect}
+                    onToggleFavorite={handleToggleFavorite}
+                    selectedVideos={selectedVideos}
+                    onToggleSelect={handleToggleSelect}
+                    scrollParentRef={scrollParentRef}
+                  />
                 </div>
               ))}
             </div>
-          ) : filteredVideos.length > 100 ? (
+          ) : (
             <VirtualizedVideoGrid
               videos={filteredVideos}
               onVideoSelect={handleVideoSelect}
@@ -610,14 +595,6 @@ const LibraryView: React.FC = () => {
               selectedVideos={selectedVideos}
               onToggleSelect={handleToggleSelect}
               scrollParentRef={scrollParentRef}
-            />
-          ) : (
-            <VideoGrid
-              videos={filteredVideos}
-              onVideoSelect={handleVideoSelect}
-              onToggleFavorite={handleToggleFavorite}
-              selectedVideos={selectedVideos}
-              onToggleSelect={handleToggleSelect}
             />
           )
         ) : (
@@ -649,6 +626,72 @@ const LibraryView: React.FC = () => {
           </div>
         )}
       </div>
+      {selectedVideos.size > 0 &&
+        (() => {
+          const selectedVideoObjects = videos.filter((v) =>
+            selectedVideos.has(v.path)
+          );
+          const allFavorited = selectedVideoObjects.every(
+            (video) => video.isFavorite
+          );
+
+          return (
+            <div className="selection-action-bar">
+              <div className="selection-info">
+                <span className="selection-count">
+                  {selectedVideos.size} selected
+                </span>
+                <button
+                  className="deselect-all-btn"
+                  onClick={handleDeselectAll}
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="selection-actions">
+                <button
+                  className="btn favorite-btn"
+                  data-glow="yellow"
+                  onClick={handleFavoriteSelected}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill={allFavorited ? "currentColor" : "none"}
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </button>
+                <button
+                  className="btn trash-btn"
+                  data-glow="red"
+                  onClick={handleTrashSelected}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
     </div>
   );
 };

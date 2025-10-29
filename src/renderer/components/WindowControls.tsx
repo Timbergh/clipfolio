@@ -9,9 +9,9 @@ const WindowControls: React.FC = () => {
   const handleClose = () => api.window.close();
 
   return (
-    <div className="window-controls no-drag" aria-label="Window controls">
+    <div className="window-controls" aria-label="Window controls">
       <button
-        className="win-btn win-min"
+        className="win-btn win-min no-drag"
         onClick={handleMinimize}
         title="Minimize"
         aria-label="Minimize"
@@ -32,7 +32,7 @@ const WindowControls: React.FC = () => {
         </svg>
       </button>
       <button
-        className="win-btn win-max"
+        className="win-btn win-max no-drag"
         onClick={handleMaximize}
         title="Maximize"
         aria-label="Maximize"
@@ -53,7 +53,7 @@ const WindowControls: React.FC = () => {
         </svg>
       </button>
       <button
-        className="win-btn win-close"
+        className="win-btn win-close no-drag"
         onClick={handleClose}
         title="Close"
         aria-label="Close"

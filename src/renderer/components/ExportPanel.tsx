@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { AudioTrack } from "../types";
+import { useGlowEffect } from "../hooks/useGlowEffect";
 import "../styles/ExportPanel.css";
 
 const api = window.api;
@@ -25,6 +26,9 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
   audioTracks,
   onClose,
 }) => {
+  // Initialize glow effect system
+  useGlowEffect();
+
   const [selectedSize, setSelectedSize] = useState<SizeOption>("original");
   const [isProcessing, setIsProcessing] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -49,6 +53,16 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
   type OutputType = "video" | "mp3";
   const [outputType, setOutputType] = useState<OutputType>("video");
 
+  // Format dropdowns
+  type VideoFormat = "mp4" | "mov" | "avi" | "mkv";
+  type AudioFormat = "mp3" | "wav" | "aac";
+  const [videoFormat, setVideoFormat] = useState<VideoFormat>("mp4");
+  const [audioFormat, setAudioFormat] = useState<AudioFormat>("mp3");
+  const [isVideoFormatOpen, setIsVideoFormatOpen] = useState(false);
+  const [isAudioFormatOpen, setIsAudioFormatOpen] = useState(false);
+  const videoFormatRef = useRef<HTMLDivElement>(null);
+  const audioFormatRef = useRef<HTMLDivElement>(null);
+
   const sizeOptions: { value: SizeOption; label: string; sizeMB?: number }[] = [
     { value: "original", label: "Original" },
     { value: "10mb", label: "10 MB", sizeMB: 10 },
@@ -56,6 +70,49 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
     { value: "50mb", label: "50 MB", sizeMB: 50 },
     { value: "100mb", label: "100 MB", sizeMB: 100 },
   ];
+
+  const videoFormats: Array<{ value: VideoFormat; label: string }> = [
+    { value: "mp4", label: "MP4" },
+    { value: "mov", label: "MOV" },
+    { value: "avi", label: "AVI" },
+    { value: "mkv", label: "MKV" },
+  ];
+
+  const audioFormats: Array<{ value: AudioFormat; label: string }> = [
+    { value: "mp3", label: "MP3" },
+    { value: "wav", label: "WAV" },
+    { value: "aac", label: "AAC" },
+  ];
+
+  // Close dropdowns on outside click or escape
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        videoFormatRef.current &&
+        !videoFormatRef.current.contains(e.target as Node)
+      ) {
+        setIsVideoFormatOpen(false);
+      }
+      if (
+        audioFormatRef.current &&
+        !audioFormatRef.current.contains(e.target as Node)
+      ) {
+        setIsAudioFormatOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsVideoFormatOpen(false);
+        setIsAudioFormatOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   useEffect(() => {
     const generatePreviewThumbnail = async () => {
@@ -82,6 +139,24 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
       ) as AudioMode | null;
       if (savedAudioMode && ["combine", "separate"].includes(savedAudioMode)) {
         setAudioMode(savedAudioMode as AudioMode);
+      }
+      const savedVideoFormat = localStorage.getItem(
+        "export.videoFormat"
+      ) as VideoFormat | null;
+      if (
+        savedVideoFormat &&
+        ["mp4", "mov", "avi", "mkv"].includes(savedVideoFormat)
+      ) {
+        setVideoFormat(savedVideoFormat as VideoFormat);
+      }
+      const savedAudioFormat = localStorage.getItem(
+        "export.audioFormat"
+      ) as AudioFormat | null;
+      if (
+        savedAudioFormat &&
+        ["mp3", "wav", "aac"].includes(savedAudioFormat)
+      ) {
+        setAudioFormat(savedAudioFormat as AudioFormat);
       }
     } catch {}
     generatePreviewThumbnail();
@@ -160,6 +235,19 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
       localStorage.setItem("export.audioMode", audioMode);
     } catch {}
   }, [audioMode]);
+
+  // Persist format selections
+  useEffect(() => {
+    try {
+      localStorage.setItem("export.videoFormat", videoFormat);
+    } catch {}
+  }, [videoFormat]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("export.audioFormat", audioFormat);
+    } catch {}
+  }, [audioFormat]);
 
   // Restart when output type changes
   useEffect(() => {
@@ -305,7 +393,8 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
       const os = window.os;
       const tempDir = os.tmpdir();
       const timestamp = Date.now();
-      const outputExt = outputType === "mp3" ? ".mp3" : path.extname(videoName);
+      const outputExt =
+        outputType === "mp3" ? `.${audioFormat}` : `.${videoFormat}`;
       const outputFileName = `export_${timestamp}${outputExt}`;
       const outputPath = path.join(tempDir, outputFileName);
 
@@ -391,16 +480,16 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
         outputType === "mp3"
           ? `${path.basename(videoName, path.extname(videoName))}_${
               selectedOption?.label
-            }.mp3`
+            }.${audioFormat}`
           : `${path.basename(videoName, path.extname(videoName))}_${
               selectedOption?.label
-            }${path.extname(videoName)}`
+            }.${videoFormat}`
       );
 
       const filters =
         outputType === "mp3"
-          ? [{ name: "Audio", extensions: ["mp3"] }]
-          : [{ name: "Videos", extensions: ["mp4", "mov", "avi", "mkv"] }];
+          ? [{ name: "Audio", extensions: [audioFormat] }]
+          : [{ name: "Videos", extensions: [videoFormat] }];
 
       const result = await api.selectSaveLocation(defaultPath, filters);
 
@@ -515,19 +604,13 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
 
       {/* Size selection radio buttons */}
       <div className="size-selection">
-        <div className="size-options">
+        <div className="size-options" data-glow>
           {sizeOptions.map((option, index) => (
             <label
               key={option.value}
               className={`size-option ${
                 selectedSize === option.value ? "selected" : ""
-              } ${
-                index === 0
-                  ? "first"
-                  : index === sizeOptions.length - 1
-                  ? "last"
-                  : ""
-              } ${outputType === "mp3" ? "disabled" : ""}`}
+              }  ${outputType === "mp3" ? "disabled" : ""}`}
             >
               <input
                 type="radio"
@@ -537,7 +620,15 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
                 onChange={() => setSelectedSize(option.value)}
                 disabled={outputType === "mp3"}
               />
-              <div className="size-option-content">
+              <div
+                className={`btn size-option-content ${
+                  index === 0
+                    ? "first"
+                    : index === sizeOptions.length - 1
+                    ? "last"
+                    : ""
+                }`}
+              >
                 <span className="size-label">{option.label}</span>
               </div>
             </label>
@@ -547,7 +638,7 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
 
       {/* Audio output options */}
       <div className="size-selection" style={{ marginTop: 8 }}>
-        <div className="size-options">
+        <div className="tracks-options">
           <label
             className={`size-option ${
               audioMode === "combine" ? "selected" : ""
@@ -561,7 +652,7 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
               onChange={() => setAudioMode("combine")}
               disabled={outputType === "mp3"}
             />
-            <div className="size-option-content">
+            <div className="btn tracks-option-content" data-glow>
               <span className="size-label">Combine audio tracks</span>
             </div>
           </label>
@@ -578,48 +669,146 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
               onChange={() => setAudioMode("separate")}
               disabled={outputType === "mp3"}
             />
-            <div className="size-option-content">
+            <div className="btn tracks-option-content" data-glow>
               <span className="size-label">Keep tracks separate</span>
             </div>
           </label>
         </div>
       </div>
 
-      {/* Output format selection */}
+      {/* Export format dropdowns */}
+      <h3 style={{ marginTop: 24 }}>Export Format</h3>
       <div className="size-selection" style={{ marginTop: 8 }}>
-        <div className="size-options">
-          <label
-            className={`size-option ${
-              outputType === "video" ? "selected" : ""
-            } first`}
+        <div className="format-options">
+          {/* Video format dropdown */}
+          <div
+            ref={videoFormatRef}
+            className="export-format-container"
+            data-glow
           >
-            <input
-              type="radio"
-              name="outputType"
-              value="video"
-              checked={outputType === "video"}
-              onChange={() => setOutputType("video")}
-            />
-            <div className="size-option-content">
-              <span className="size-label">MP4 (video)</span>
-            </div>
-          </label>
-          <label
-            className={`size-option ${
-              outputType === "mp3" ? "selected" : ""
-            } last`}
+            <button
+              className="btn format-button"
+              onClick={() => setOutputType("video")}
+              disabled={outputType === "video"}
+              type="button"
+            >
+              Export Video
+            </button>
+            <button
+              className={`btn format-dropdown-toggle ${
+                isVideoFormatOpen ? "open" : ""
+              }`}
+              onClick={() => setIsVideoFormatOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={isVideoFormatOpen}
+              type="button"
+            >
+              <span className="format-dropdown-arrow">
+                {videoFormat.toUpperCase()}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="format-dropdown-arrow-icon"
+                  style={{ marginLeft: 4 }}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
+            </button>
+            {isVideoFormatOpen && (
+              <div className="format-dropdown-menu" role="listbox">
+                {videoFormats.map((fmt) => (
+                  <button
+                    key={fmt.value}
+                    className={`format-dropdown-item ${
+                      fmt.value === videoFormat ? "active" : ""
+                    }`}
+                    role="option"
+                    aria-selected={fmt.value === videoFormat}
+                    type="button"
+                    onClick={() => {
+                      setVideoFormat(fmt.value);
+                      setIsVideoFormatOpen(false);
+                    }}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Audio format dropdown */}
+          <div
+            ref={audioFormatRef}
+            className="export-format-container"
+            data-glow
           >
-            <input
-              type="radio"
-              name="outputType"
-              value="mp3"
-              checked={outputType === "mp3"}
-              onChange={() => setOutputType("mp3")}
-            />
-            <div className="size-option-content">
-              <span className="size-label">MP3 (audio only)</span>
-            </div>
-          </label>
+            <button
+              className="btn format-button"
+              onClick={() => setOutputType("mp3")}
+              disabled={outputType === "mp3"}
+              type="button"
+            >
+              Export Audio
+            </button>
+            <button
+              className={`btn format-dropdown-toggle ${
+                isAudioFormatOpen ? "open" : ""
+              }`}
+              onClick={() => setIsAudioFormatOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={isAudioFormatOpen}
+              type="button"
+            >
+              <span className="format-dropdown-arrow">
+                {audioFormat.toUpperCase()}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="format-dropdown-arrow-icon"
+                  style={{ marginLeft: 4 }}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
+            </button>
+            {isAudioFormatOpen && (
+              <div className="format-dropdown-menu" role="listbox">
+                {audioFormats.map((fmt) => (
+                  <button
+                    key={fmt.value}
+                    className={`format-dropdown-item ${
+                      fmt.value === audioFormat ? "active" : ""
+                    }`}
+                    role="option"
+                    aria-selected={fmt.value === audioFormat}
+                    type="button"
+                    onClick={() => {
+                      setAudioFormat(fmt.value);
+                      setIsAudioFormatOpen(false);
+                    }}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -642,7 +831,11 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
         ) : processedVideoPath ? (
           <>
             <div className="drag-drop-area">
-              <div className="video-thumbnail" onMouseDown={handleMouseDown}>
+              <div
+                className="video-thumbnail"
+                onMouseDown={handleMouseDown}
+                data-glow="huge"
+              >
                 {thumbnailPath ? (
                   <img
                     src={window.path.toLocalURL(thumbnailPath)}
@@ -694,7 +887,12 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
               </div>
             </div>
 
-            <button className="download-btn" onClick={handleDownload}>
+            <button
+              className="btn download-btn"
+              onClick={handleDownload}
+              type="button"
+              data-glow
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
