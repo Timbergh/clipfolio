@@ -78,6 +78,11 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.size-option.selected .tracks-option-content {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .size-option input[type="radio"]:disabled ~ .size-option-content {
   opacity: 0.5;
   cursor: not-allowed;

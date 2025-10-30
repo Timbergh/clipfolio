@@ -298,37 +298,43 @@ const LibraryView: React.FC = () => {
     setFilteredVideos(result);
   }, [searchQuery, sortBy, sortOrder, videos, showFavoritesOnly]);
 
-  const handleVideoSelect = React.useCallback((video: VideoFile) => {
-    // Show black overlay and hide light rays immediately
-    if ((window as any).__showOverlay) {
-      (window as any).__showOverlay();
-    }
+  const handleVideoSelect = React.useCallback(
+    (video: VideoFile) => {
+      // Show black overlay and hide light rays immediately
+      if ((window as any).__showOverlay) {
+        (window as any).__showOverlay();
+      }
 
-    // Navigate immediately
-    navigate("/editor", { state: { video } });
-  }, [navigate]);
+      // Navigate immediately
+      navigate("/editor", { state: { video } });
+    },
+    [navigate]
+  );
 
-  const handleToggleFavorite = React.useCallback(async (video: VideoFileWithMetadata) => {
-    if (!video.contentHash) return;
+  const handleToggleFavorite = React.useCallback(
+    async (video: VideoFileWithMetadata) => {
+      if (!video.contentHash) return;
 
-    try {
-      const result = await api.toggleFavorite({
-        contentHash: video.contentHash,
-        filepath: video.path,
-        fileSize: video.size,
-        duration: video.duration || null,
-      });
+      try {
+        const result = await api.toggleFavorite({
+          contentHash: video.contentHash,
+          filepath: video.path,
+          fileSize: video.size,
+          duration: video.duration || null,
+        });
 
-      // Update videos state - filteredVideos will be updated by the useEffect
-      setVideos((prevVideos) =>
-        prevVideos.map((v) =>
-          v.path === video.path ? { ...v, isFavorite: result.isFavorite } : v
-        )
-      );
-    } catch (error) {
-      console.error("Error toggling favorite:", error);
-    }
-  }, []);
+        // Update videos state - filteredVideos will be updated by the useEffect
+        setVideos((prevVideos) =>
+          prevVideos.map((v) =>
+            v.path === video.path ? { ...v, isFavorite: result.isFavorite } : v
+          )
+        );
+      } catch (error) {
+        console.error("Error toggling favorite:", error);
+      }
+    },
+    []
+  );
 
   const handleToggleSelect = React.useCallback((videoPath: string) => {
     setSelectedVideos((prev) => {
@@ -620,7 +626,7 @@ const LibraryView: React.FC = () => {
             </div>
             <h2>No Folder Selected</h2>
             <p>Select a folder to view your video clips</p>
-            <button className="primary-btn" onClick={handleSelectFolder}>
+            <button className="btn" data-glow onClick={handleSelectFolder}>
               Select Folder
             </button>
           </div>
