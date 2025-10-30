@@ -963,9 +963,9 @@ const EditorView: React.FC = () => {
                   viewBox="0 0 24 24"
                   fill="currentColor"
                   stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   className="play-control-btn-icon"
                 >
                   <path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" />
@@ -986,9 +986,9 @@ const EditorView: React.FC = () => {
                     viewBox="0 0 24 24"
                     fill="currentColor"
                     stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     className="play-control-btn-icon"
                   >
                     <rect x="14" y="3" width="5" height="18" rx="1" />
@@ -1002,9 +1002,9 @@ const EditorView: React.FC = () => {
                     viewBox="0 0 24 24"
                     fill="currentColor"
                     stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     className="play-control-btn-icon"
                   >
                     <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
@@ -1024,9 +1024,9 @@ const EditorView: React.FC = () => {
                   viewBox="0 0 24 24"
                   fill="currentColor"
                   stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   className="play-control-btn-icon"
                 >
                   <path d="M21 4v16" />

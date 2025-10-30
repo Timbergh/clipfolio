@@ -38,6 +38,11 @@ const VideoCard: React.FC<VideoCardProps> = ({
   observerRoot,
 }) => {
     const videoWithMeta = video as VideoFileWithMetadata;
+    const [isHovering, setIsHovering] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const hasEndedRef = useRef(false);
 
     const handleFavoriteClick = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -85,6 +90,142 @@ const VideoCard: React.FC<VideoCardProps> = ({
     const hasTrimEdits =
       videoWithMeta.edits?.trimStart !== undefined &&
       videoWithMeta.edits?.trimEnd !== undefined;
+
+    // Calculate thumbnail timestamp (matching main process logic)
+    const getThumbnailTime = (): number => {
+      if (hasTrimEdits && videoWithMeta.edits!.trimStart !== undefined) {
+        return videoWithMeta.edits!.trimStart;
+      } else if (video.duration !== undefined && video.duration > 0) {
+        return video.duration / 2;
+      }
+      return 1;
+    };
+
+    const handleMouseEnter = () => {
+      setIsHovering(true);
+      // Delay showing preview by 500ms to avoid triggering on quick hovers
+      hoverTimerRef.current = setTimeout(() => {
+        // Only show preview if it hasn't ended yet
+        if (!hasEndedRef.current) {
+          setShowPreview(true);
+        }
+      }, 500);
+    };
+
+    const handleMouseLeave = () => {
+      setIsHovering(false);
+      setShowPreview(false);
+      hasEndedRef.current = false; // Reset the ended flag
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+    };
+
+    // Handle video preview playback
+    useEffect(() => {
+      if (!showPreview || !videoRef.current) return;
+
+      // Reset ended flag when starting a new preview
+      hasEndedRef.current = false;
+
+      const videoElement = videoRef.current;
+      const thumbnailTime = getThumbnailTime();
+      const maxPlayTime = 10; // Maximum 10 seconds of preview
+      let isMounted = true;
+
+      const startPlayback = async () => {
+        if (!isMounted) return;
+
+        try {
+          // Set the starting time
+          videoElement.currentTime = thumbnailTime;
+
+          // Try to play
+          await videoElement.play();
+          console.log('Preview playing from', thumbnailTime);
+        } catch (error: any) {
+          // Silently handle - some formats may not be supported
+          if (error.name !== 'AbortError') {
+            console.log('Preview play error:', error.name, error.message);
+          }
+        }
+      };
+
+      // Handle video errors
+      const handleError = (e: Event) => {
+        const videoEl = e.target as HTMLVideoElement;
+        console.error('[VideoPreview] Error loading:', video.name, {
+          error: videoEl.error,
+          code: videoEl.error?.code,
+          message: videoEl.error?.message,
+          networkState: videoEl.networkState,
+          readyState: videoEl.readyState,
+        });
+      };
+
+      // Stop video after 10 seconds
+      const timeUpdateHandler = () => {
+        if (videoElement.currentTime >= thumbnailTime + maxPlayTime) {
+          videoElement.pause();
+          videoElement.currentTime = thumbnailTime;
+        }
+      };
+
+      // Handle video ending (if video is shorter than 10 seconds from start point)
+      const handleEnded = () => {
+        if (!isMounted) return;
+        // Mark as ended and stop preview to show thumbnail again
+        hasEndedRef.current = true;
+        setShowPreview(false);
+      };
+
+      // Wait for video to be ready
+      const handleCanPlay = () => {
+        if (!isMounted) return;
+        console.log('Video can play, starting preview for:', video.name);
+        startPlayback();
+      };
+
+      const handleLoadedMetadata = () => {
+        console.log('Video metadata loaded for:', video.name, 'duration:', videoElement.duration);
+      };
+
+      // Add event handlers
+      videoElement.addEventListener('error', handleError);
+      videoElement.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+      videoElement.addEventListener('ended', handleEnded);
+
+      // Check if already ready
+      if (videoElement.readyState >= 3) {
+        // HAVE_FUTURE_DATA or better
+        console.log('Video already ready, starting preview for:', video.name);
+        startPlayback();
+      } else {
+        videoElement.addEventListener('canplay', handleCanPlay, { once: true });
+      }
+
+      videoElement.addEventListener('timeupdate', timeUpdateHandler);
+
+      return () => {
+        isMounted = false;
+        videoElement.removeEventListener('error', handleError);
+        videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        videoElement.removeEventListener('canplay', handleCanPlay);
+        videoElement.removeEventListener('timeupdate', timeUpdateHandler);
+        videoElement.removeEventListener('ended', handleEnded);
+        videoElement.pause();
+      };
+    }, [showPreview]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+      return () => {
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+        }
+      };
+    }, []);
     const displayDuration =
       video.duration !== undefined
         ? hasTrimEdits
@@ -93,8 +234,24 @@ const VideoCard: React.FC<VideoCardProps> = ({
         : 0;
 
     return (
-      <div className="video-card" onClick={() => onVideoSelect(video)}>
+      <div
+        className="video-card"
+        onClick={() => onVideoSelect(video)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
         <div className="clip-thumbnail">
+          {showPreview && (
+            <video
+              ref={videoRef}
+              className="video-preview"
+              src={window.path.toLocalURL(video.path)}
+              muted={true}
+              playsInline
+              preload="metadata"
+              crossOrigin="anonymous"
+            />
+          )}
           <LazyThumbnail
             className="clip-thumbnail"
             videoPath={video.path}
